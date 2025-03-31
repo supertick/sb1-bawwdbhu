@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.leaflet-popup-content-wrapper {
+  padding: 0;
+  overflow: hidden;
+}
+
+.leaflet-popup-content {
+  margin: 0;
+  padding: 1rem;
+}
+
+.property-popup .leaflet-popup-content {
+  width: 340px !important;
+}
+
+.property-popup .leaflet-popup-content-wrapper {
+  border-radius: 0.5rem;
+}
