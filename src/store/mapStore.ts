@@ -135,7 +135,7 @@ export const useMapStore = create<MapState>()(
       fetchProperties: async () => {
         set({ isLoading: true, error: null });
         try {
-          const properties = await apiClient.get<Property[]>('/api/properties');
+          const properties = await apiClient.get<Property[]>('/sri-data-list');
           set({ properties, isLoading: false });
         } catch (error) {
           set({ 
