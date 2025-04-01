@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { DataGrid, GridColDef, GridColumnVisibilityModel } from '@mui/x-data-grid';
 import { Property } from '../types';
 import { useMapStore } from '../store/mapStore';
-import { Select, MenuItem, TextField, Button, Menu, Checkbox, FormControlLabel, Box } from '@mui/material';
+import { Select, MenuItem, TextField, Button, Menu, Checkbox, FormControlLabel, Box, Link } from '@mui/material';
 import { Eye } from 'lucide-react';
 
 interface PropertyTableProps {
@@ -19,7 +19,27 @@ const PropertyTable: React.FC<PropertyTableProps> = ({ properties }) => {
     { field: 'propertyStreet', headerName: 'Address', width: 200 },
     { field: 'propertyCity', headerName: 'City', width: 130 },
     { field: 'propertyZip', headerName: 'ZIP', width: 100 },
-    { field: 'propertyID', headerName: 'Parcel #', width: 200 },
+    { 
+      field: 'propertyID', 
+      headerName: 'Parcel #', 
+      width: 200,
+      renderCell: (params) => (
+        <Link 
+          href={`https://beacon.schneidercorp.com/Application.aspx?AppID=99&LayerID=962&PageTypeID=4&PageID=611&Q=766879730&KeyValue=${params.value}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          sx={{ 
+            color: 'primary.main',
+            textDecoration: 'none',
+            '&:hover': {
+              textDecoration: 'underline'
+            }
+          }}
+        >
+          {params.value}
+        </Link>
+      )
+    },
     {
       field: 'saleDate',
       headerName: 'Sale Date',
@@ -84,12 +104,12 @@ const PropertyTable: React.FC<PropertyTableProps> = ({ properties }) => {
     },
   ];
 
-  const rows = properties.map((property, index) => ({
+  const rows = Array.isArray(properties) ? properties.map((property, index) => ({
     id: index,
     ...property,
     priority: propertyNotes[property.propertyID]?.[userId]?.priority || null,
     comment: propertyNotes[property.propertyID]?.[userId]?.comment || '',
-  }));
+  })) : [];
 
   const handleColumnVisibilityChange = (model: GridColumnVisibilityModel) => {
     setColumnVisibility(model);
@@ -119,7 +139,14 @@ const PropertyTable: React.FC<PropertyTableProps> = ({ properties }) => {
   };
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ 
+      height: 'calc(100vh - 64px)', // Subtract AppBar height
+      display: 'flex',
+      flexDirection: 'column',
+      width: '100%',
+      position: 'relative',
+      overflow: 'hidden'
+    }}>
       <Box sx={{ p: 1, display: 'flex', gap: 1 }}>
         <Button
           size="small"
@@ -160,7 +187,13 @@ const PropertyTable: React.FC<PropertyTableProps> = ({ properties }) => {
           ))}
         </Menu>
       </Box>
-      <Box sx={{ flexGrow: 1 }}>
+      <Box sx={{ 
+        flexGrow: 1,
+        height: 'calc(100% - 48px)', // Subtract toolbar height
+        '& .MuiDataGrid-root': {
+          border: 'none',
+        }
+      }}>
         <DataGrid
           rows={rows}
           columns={columns}
@@ -171,7 +204,16 @@ const PropertyTable: React.FC<PropertyTableProps> = ({ properties }) => {
               sortModel: [{ field: 'saleDate', sort: 'asc' }],
             },
           }}
-          sx={{ height: '100%' }}
+          sx={{ 
+            height: '100%',
+            width: '100%',
+            '& .MuiDataGrid-main': {
+              overflow: 'auto'
+            },
+            '& .MuiDataGrid-virtualScroller': {
+              overflow: 'auto'
+            }
+          }}
         />
       </Box>
     </Box>

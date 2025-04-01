@@ -107,7 +107,7 @@ const Dashboard = () => {
   }
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       {/* Top AppBar */}
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar sx={{ justifyContent: 'space-between' }}>
@@ -128,13 +128,18 @@ const Dashboard = () => {
       <Box component="main" sx={{ 
         flexGrow: 1, 
         width: `calc(100% - ${DRAWER_WIDTH}px)`,
-        marginLeft: 0 
+        marginLeft: 0,
+        height: '100vh',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column'
       }}>
         <Toolbar /> {/* Spacer for AppBar */}
         <Box sx={{ 
-          height: 'calc(100vh - 64px)', 
+          flex: 1,
           bgcolor: 'background.paper',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          position: 'relative'
         }}>
           {view === 'map' ? (
             <PropertyMap properties={properties || []} />

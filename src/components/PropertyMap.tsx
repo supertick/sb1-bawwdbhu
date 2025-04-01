@@ -4,8 +4,8 @@ import 'leaflet/dist/leaflet.css';
 import { Property, Priority, PropertyNote } from '../types';
 import { Icon } from 'leaflet';
 import { useMapStore } from '../store/mapStore';
-import { MapPin, Home, Calendar, DollarSign, User, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
-import { Select, MenuItem, TextField, FormControl, InputLabel, Button, IconButton, Tooltip } from '@mui/material';
+import { MapPin, Home, Calendar, User, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
+import { Select, MenuItem, TextField, FormControl, InputLabel, Button, IconButton, Tooltip, Link } from '@mui/material';
 import MapLayers from './MapLayers';
 
 const createColoredIcon = (color: string) => new Icon({
@@ -74,18 +74,53 @@ const PropertyMap: React.FC<PropertyMapProps> = ({ properties }) => {
   const { center, zoom, propertyNotes, userId, setPropertyNote, markAsVisited, selectedPropertyId, resetPropertyNote } = useMapStore();
   const markersRef = useRef<{ [key: string]: L.Marker }>({});
   const [expandedPopups, setExpandedPopups] = useState<{ [key: string]: boolean }>({});
+  const [editingNotes, setEditingNotes] = useState<{ [key: string]: { priority: Priority | null; comment: string } }>({});
   
-  const handlePriorityChange = useCallback((propertyId: string, currentNote: PropertyNote | undefined, newPriority: Priority) => {
-    if (currentNote?.priority !== newPriority) {
-      setPropertyNote(propertyId, { priority: newPriority });
-    }
-  }, [setPropertyNote]);
+  const handlePriorityChange = useCallback((propertyId: string, newPriority: Priority) => {
+    setEditingNotes(prev => ({
+      ...prev,
+      [propertyId]: {
+        ...prev[propertyId] || { 
+          priority: propertyNotes[propertyId]?.[userId]?.priority || null,
+          comment: propertyNotes[propertyId]?.[userId]?.comment || ''
+        },
+        priority: newPriority
+      }
+    }));
+  }, [propertyNotes, userId]);
 
-  const handleCommentChange = useCallback((propertyId: string, currentNote: PropertyNote | undefined, newComment: string) => {
-    if (currentNote?.comment !== newComment) {
-      setPropertyNote(propertyId, { comment: newComment });
+  const handleCommentChange = useCallback((propertyId: string, newComment: string) => {
+    setEditingNotes(prev => ({
+      ...prev,
+      [propertyId]: {
+        ...prev[propertyId] || {
+          priority: propertyNotes[propertyId]?.[userId]?.priority || null,
+          comment: propertyNotes[propertyId]?.[userId]?.comment || ''
+        },
+        comment: newComment
+      }
+    }));
+  }, [propertyNotes, userId]);
+
+  const handleSave = useCallback((propertyId: string) => {
+    const editedNote = editingNotes[propertyId];
+    if (editedNote) {
+      setPropertyNote(propertyId, editedNote);
+      setEditingNotes(prev => {
+        const newState = { ...prev };
+        delete newState[propertyId];
+        return newState;
+      });
     }
-  }, [setPropertyNote]);
+  }, [editingNotes, setPropertyNote]);
+
+  const handleCancel = useCallback((propertyId: string) => {
+    setEditingNotes(prev => {
+      const newState = { ...prev };
+      delete newState[propertyId];
+      return newState;
+    });
+  }, []);
 
   const togglePopupExpansion = useCallback((propertyId: string) => {
     setExpandedPopups(prev => ({
@@ -96,6 +131,11 @@ const PropertyMap: React.FC<PropertyMapProps> = ({ properties }) => {
 
   const handleReset = useCallback((propertyId: string) => {
     resetPropertyNote(propertyId);
+    setEditingNotes(prev => {
+      const newState = { ...prev };
+      delete newState[propertyId];
+      return newState;
+    });
   }, [resetPropertyNote]);
   
   return (
@@ -110,10 +150,9 @@ const PropertyMap: React.FC<PropertyMapProps> = ({ properties }) => {
         if (!property?.latitude || !property?.longitude) return null;
         
         const note = propertyNotes[property.propertyID]?.[userId];
+        const editingNote = editingNotes[property.propertyID];
         const icon = note?.visited && note?.priority ? markerIcons[note.priority] : markerIcons.unvisited;
         const isExpanded = expandedPopups[property.propertyID];
-        
-        const fallbackImage = `https://images.unsplash.com/photo-1568605114967-8130f3a36994?auto=format&fit=crop&w=400&h=200`;
         
         return (
           <Marker
@@ -134,22 +173,26 @@ const PropertyMap: React.FC<PropertyMapProps> = ({ properties }) => {
             }}
           >
             <Popup className="property-popup" maxWidth={400}>
-              <div className="flex flex-col gap-4 min-w-[300px]">
+              <div className="flex flex-col gap-2 min-w-[300px]">
                 <img
-                  src={fallbackImage}
+                  src="https://beacon.schneidercorp.com/BeaconData/BeaconTemp/C-99-2ba7aef2e0b94686a05306dc8fe944e6.png"
                   alt={property.propertyStreet}
                   className="w-full h-[200px] object-cover rounded-lg"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.src = fallbackImage;
-                  }}
                 />
                 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <div className="flex justify-between items-start">
                     <div>
                       <h3 className="text-xl font-bold text-gray-900">{property.propertyStreet}</h3>
                       <p className="text-sm text-gray-600">{property.propertyCity}, {property.propertyZip}</p>
+                      <Link
+                        href={`https://beacon.schneidercorp.com/Application.aspx?AppID=99&LayerID=962&PageTypeID=4&PageID=611&Q=766879730&KeyValue=${property.propertyID}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-primary hover:underline"
+                      >
+                        {property.propertyID}
+                      </Link>
                     </div>
                     <div className="flex items-center gap-2">
                       <Tooltip title="Reset property">
@@ -177,8 +220,7 @@ const PropertyMap: React.FC<PropertyMapProps> = ({ properties }) => {
                       <span>{property.saleDate}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <DollarSign className="w-4 h-4 text-gray-600" />
-                      <span>{property.minimumBid}</span>
+                      <span className="font-medium">{property.minimumBid}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-gray-600" />
@@ -193,22 +235,18 @@ const PropertyMap: React.FC<PropertyMapProps> = ({ properties }) => {
                   </div>
 
                   {isExpanded && (
-                    <div className="mt-4 space-y-3 border-t pt-3">
-                      <div>
-                        <p className="text-sm font-medium text-gray-500">County</p>
-                        <p>{property.county}</p>
+                    <div className="mt-2 space-y-2 border-t pt-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-gray-500">County</span>
+                        <span className="text-sm">{property.county}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-gray-500">Sale ID</span>
+                        <span className="text-sm">{property.saleID}</span>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-500">Property ID</p>
-                        <p>{property.propertyID}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-500">Sale ID</p>
-                        <p>{property.saleID}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-500">Legal Description</p>
-                        <p className="text-sm">{property.legal}</p>
+                        <span className="text-sm font-medium text-gray-500">Legal Description</span>
+                        <p className="text-sm mt-1">{property.legal}</p>
                       </div>
                     </div>
                   )}
@@ -217,16 +255,14 @@ const PropertyMap: React.FC<PropertyMapProps> = ({ properties }) => {
                     <FormControl fullWidth size="small">
                       <InputLabel>Priority</InputLabel>
                       <Select
-                        value={note?.priority || ''}
+                        value={editingNote?.priority || note?.priority || ''}
                         label="Priority"
-                        onChange={(e) => {
-                          handlePriorityChange(property.propertyID, note, e.target.value as Priority);
-                        }}
+                        onChange={(e) => handlePriorityChange(property.propertyID, e.target.value as Priority)}
                         sx={{
                           '& .MuiSelect-select': {
-                            color: note?.priority === 'high' ? '#ef4444' :
-                                   note?.priority === 'medium' ? '#eab308' :
-                                   note?.priority === 'low' ? '#9ca3af' : 'inherit'
+                            color: editingNote?.priority === 'high' || note?.priority === 'high' ? '#ef4444' :
+                                   editingNote?.priority === 'medium' || note?.priority === 'medium' ? '#eab308' :
+                                   editingNote?.priority === 'low' || note?.priority === 'low' ? '#9ca3af' : 'inherit'
                           }
                         }}
                       >
@@ -242,11 +278,26 @@ const PropertyMap: React.FC<PropertyMapProps> = ({ properties }) => {
                       label="Notes"
                       multiline
                       rows={2}
-                      value={note?.comment || ''}
-                      onChange={(e) => {
-                        handleCommentChange(property.propertyID, note, e.target.value);
-                      }}
+                      value={editingNote?.comment || note?.comment || ''}
+                      onChange={(e) => handleCommentChange(property.propertyID, e.target.value)}
                     />
+
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="small"
+                        onClick={() => handleCancel(property.propertyID)}
+                        variant="outlined"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="small"
+                        onClick={() => handleSave(property.propertyID)}
+                        variant="contained"
+                      >
+                        Update
+                      </Button>
+                    </div>
 
                     <div className="text-xs text-gray-500">
                       {note?.lastUpdated && (

@@ -15,17 +15,17 @@ interface MapState {
   selectedBaseLayer: string;
   enabledOverlays: string[];
   setMapState: (center: [number, number], zoom: number) => void;
-  setPropertyNote: (propertyId: string, note: Partial<PropertyNote>) => void;
+  setPropertyNote: (propertyId: string, note: Partial<PropertyNote>) => Promise<void>;
   markAsVisited: (propertyId: string) => void;
   setSelectedProperty: (propertyId: string | null) => void;
-  resetPropertyNote: (propertyId: string) => void;
+  resetPropertyNote: (propertyId: string) => Promise<void>;
   setSelectedBaseLayer: (layerId: string) => void;
   toggleOverlay: (layerId: string) => void;
   fetchProperties: () => Promise<void>;
 }
 
 // Temporary user ID for demo purposes
-const DEMO_USER_ID = 'user-1';
+const DEMO_USER_ID = 'greg@cloudseeder.com';
 
 export const useMapStore = create<MapState>()(
   persist(
@@ -49,31 +49,94 @@ export const useMapStore = create<MapState>()(
           }
           return { center, zoom };
         }),
-      setPropertyNote: (propertyId: string, note: Partial<PropertyNote>) =>
+      setPropertyNote: async (propertyId: string, note: Partial<PropertyNote>) => {
+        const state = get();
+        const currentNotes = state.propertyNotes[propertyId]?.[state.userId] || {
+          priority: null,
+          comment: '',
+          visited: false,
+          userId: state.userId,
+          propertyId,
+          lastUpdated: new Date().toISOString()
+        };
+
+        const newNote = {
+          ...currentNotes,
+          ...note,
+          lastUpdated: new Date().toISOString()
+        };
+
+        // Only update if there are actual changes
+        if (
+          currentNotes.priority === newNote.priority &&
+          currentNotes.comment === newNote.comment &&
+          currentNotes.visited === newNote.visited
+        ) {
+          return;
+        }
+
+        try {
+          // Format the data according to the API requirements
+          const apiPayload = {
+            id: `${propertyId}|${state.userId}`,
+            property_id: propertyId,
+            user_id: state.userId,
+            priority: newNote.priority,
+            comment: newNote.comment,
+            updated_at: Date.now(),
+            visited: newNote.visited
+          };
+
+          await apiClient.put(`/property-note/${propertyId}|${state.userId}`, apiPayload);
+
+          // Update local state after successful API call
+          set({
+            propertyNotes: {
+              ...state.propertyNotes,
+              [propertyId]: {
+                ...state.propertyNotes[propertyId],
+                [state.userId]: newNote
+              }
+            }
+          });
+        } catch (error) {
+          // Error is handled by apiClient
+          console.error(error)
+          // throw error;
+        }
+      },
+      markAsVisited: (propertyId: string) =>
         set((state) => {
-          const currentNotes = state.propertyNotes[propertyId]?.[state.userId] || {
-            priority: null,
-            comment: '',
-            visited: false,
-            userId: state.userId,
-            propertyId,
-            lastUpdated: new Date().toISOString()
-          };
-
-          const newNote = {
-            ...currentNotes,
-            ...note,
-            visited: true,
-            lastUpdated: new Date().toISOString()
-          };
-
-          if (
-            currentNotes.priority === newNote.priority &&
-            currentNotes.comment === newNote.comment &&
-            currentNotes.visited === newNote.visited
-          ) {
+          const currentNote = state.propertyNotes[propertyId]?.[state.userId];
+          if (currentNote?.visited) {
             return state;
           }
+
+          const newNote = {
+            ...currentNote || {
+              priority: null,
+              comment: '',
+              userId: state.userId,
+              propertyId,
+              lastUpdated: new Date().toISOString()
+            },
+            visited: true
+          };
+
+          // Update the API using PUT instead of POST
+          const apiPayload = {
+            id: `${propertyId}|${state.userId}`,
+            property_id: propertyId,
+            user_id: state.userId,
+            priority: newNote.priority,
+            comment: newNote.comment,
+            updated_at: Date.now(),
+            visited: true
+          };
+
+          apiClient.post('/property-note', apiPayload).catch(error => {
+            console.error('Failed to mark property as visited:', error);
+          });
 
           return {
             propertyNotes: {
@@ -85,45 +148,30 @@ export const useMapStore = create<MapState>()(
             }
           };
         }),
-      markAsVisited: (propertyId: string) =>
-        set((state) => {
-          const currentNote = state.propertyNotes[propertyId]?.[state.userId];
-          if (currentNote?.visited) {
-            return state;
-          }
-
-          return {
-            propertyNotes: {
-              ...state.propertyNotes,
-              [propertyId]: {
-                ...state.propertyNotes[propertyId],
-                [state.userId]: {
-                  ...currentNote || {
-                    priority: null,
-                    comment: '',
-                    userId: state.userId,
-                    propertyId,
-                    lastUpdated: new Date().toISOString()
-                  },
-                  visited: true
-                }
-              }
-            }
-          };
-        }),
       setSelectedProperty: (propertyId: string | null) =>
         set({ selectedPropertyId: propertyId }),
-      resetPropertyNote: (propertyId: string) =>
-        set((state) => {
-          const newPropertyNotes = { ...state.propertyNotes };
-          if (newPropertyNotes[propertyId]) {
-            delete newPropertyNotes[propertyId][state.userId];
-            if (Object.keys(newPropertyNotes[propertyId]).length === 0) {
-              delete newPropertyNotes[propertyId];
+      resetPropertyNote: async (propertyId: string) => {
+        const state = get();
+        try {
+          // Send delete request to server with the correct ID format
+          await apiClient.delete(`/property-note/${propertyId}|${state.userId}`);
+
+          // Update local state after successful API call
+          set((state) => {
+            const newPropertyNotes = { ...state.propertyNotes };
+            if (newPropertyNotes[propertyId]) {
+              delete newPropertyNotes[propertyId][state.userId];
+              if (Object.keys(newPropertyNotes[propertyId]).length === 0) {
+                delete newPropertyNotes[propertyId];
+              }
             }
-          }
-          return { propertyNotes: newPropertyNotes };
-        }),
+            return { propertyNotes: newPropertyNotes };
+          });
+        } catch (error) {
+          // Error is handled by apiClient
+          throw error;
+        }
+      },
       setSelectedBaseLayer: (layerId: string) =>
         set({ selectedBaseLayer: layerId }),
       toggleOverlay: (layerId: string) =>
@@ -135,7 +183,7 @@ export const useMapStore = create<MapState>()(
       fetchProperties: async () => {
         set({ isLoading: true, error: null });
         try {
-          const properties = await apiClient.get<Property[]>('/api/properties');
+          const properties = await apiClient.get<Property[]>('/sri-data-list');
           set({ properties, isLoading: false });
         } catch (error) {
           set({ 
